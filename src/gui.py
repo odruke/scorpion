@@ -1,11 +1,32 @@
-import tkinter as tk
-from tkinter import ttk, simpledialog, messagebox
-from PIL import ImageTk
 from pathlib import Path
+from typing import Any
+import tkinter as tk
+from tkinter import messagebox, simpledialog, ttk
+
+from PIL import ImageTk
 from img_manager.img_manager import ImgManager
+from PIL.ExifTags import IFD
+from src.constants import (
+    CANVAS_WIDTH,
+    DELETE_ACTION,
+    EDIT_ACTION,
+    FILENAME_LABEL,
+    LIST_ITEM_EXTRA_HEIGHT,
+    MOUSE_WHEEL_DELTA,
+    NO_EXIF_METADATA,
+    PREVIEW_SIZE,
+    WINDOW_HEIGHT,
+    WINDOW_WIDTH,
+)
+
 
 class ListFrame(ttk.Frame):
-    def __init__(self, parent, img_list, item_height):
+    def __init__(
+        self,
+        parent: tk.Misc,
+        img_list: list[ImgManager],
+        item_height: int,
+    ) -> None:
         super().__init__(master=parent)
         self.pack(expand=True, fill='both')
 
@@ -13,11 +34,17 @@ class ListFrame(ttk.Frame):
         # widget data
         self.img_list = img_list
         self.item_number = len(img_list)
-        self.list_height = self.item_number * (item_height + 52)  # TODO modify this to fix red frame at the end (why 62 fixes it??)
+        self.list_height = self.item_number * (
+            item_height + LIST_ITEM_EXTRA_HEIGHT
+        )
         self.item_height = item_height
 
         # canvas
-        self.canvas = tk.Canvas(self, yscrollincrement=item_height + 52, scrollregion=(0, 0, 500, self.list_height))  # (left, top, right, bottom)
+        self.canvas = tk.Canvas(
+            self,
+            yscrollincrement=item_height + LIST_ITEM_EXTRA_HEIGHT,
+            scrollregion=(0, 0, CANVAS_WIDTH, self.list_height),
+        )
         # self.canvas.configure(yscrollincrement=self.canvas.bbox('all'))
         self.canvas.pack(expand=True, fill='both')
 
@@ -25,25 +52,38 @@ class ListFrame(ttk.Frame):
         self.frame = ttk.Frame(self)
 
         for image in self.img_list:
-            self.create_item(image).pack(expand=True, fill='both', padx=4, pady=10)
-            ttk.Separator(self.frame, orient='horizontal').pack(expand=True, fill='x')
+            self.create_item(image).pack(
+                expand=True,
+                fill='both',
+                padx=4,
+                pady=10)
+            ttk.Separator(
+                self.frame,
+                orient='horizontal').pack(expand=True, fill='x')
 
         # events
         self.canvas.bind_all("<MouseWheel>", self.on_mousewheel)
         self.canvas.bind_all("<Button-4>", self.on_mousewheel)
         self.canvas.bind_all("<Button-5>", self.on_mousewheel)
 
-        self.bind('<Configure>', self.update_size)
+        self.bind('<Configure>', self._on_configure)
 
-    def on_mousewheel(self, event):
+    def on_mousewheel(self, event: tk.Event) -> None:
         if event.num == 4:
             self.canvas.yview_scroll(-1, 'units')
         elif event.num == 5:
             self.canvas.yview_scroll(1, "units")
         else:
-            self.canvas.yview_scroll(-int(event.delta / 120), "units")
+            self.canvas.yview_scroll(
+                -int(event.delta / MOUSE_WHEEL_DELTA),
+                "units",
+            )
 
-    def update_size(self, event):
+    def _on_configure(self, event: tk.Event) -> None:
+        if event.widget is self:
+            self.update_size()
+
+    def update_size(self) -> None:
         if self.list_height >= self.winfo_height():
             height = self.list_height
             self.canvas.bind_all("<MouseWheel>", self.on_mousewheel)
@@ -76,7 +116,11 @@ class ListFrame(ttk.Frame):
         preview = ImageTk.PhotoImage(image.preview)
         self.tk_previews.append(preview)
 
-        preview_frame = ttk.Frame(frame, width=250, height=250)
+        preview_frame = ttk.Frame(
+            frame,
+            width=PREVIEW_SIZE,
+            height=PREVIEW_SIZE,
+        )
         preview_frame.grid(row=1, column=0, rowspan=7, padx=10)
 
         # Prevent the frame from shrinking to fit its contents
@@ -88,11 +132,27 @@ class ListFrame(ttk.Frame):
         # Non modifiable main data
         row = 1
         for label, value in image.primary_data.items():
-            if label == "Filename":
+            if label == FILENAME_LABEL:
                 filename = Path(value).name
-                ttk.Label(frame, borderwidth=1, relief='raised', text=f'File: {filename}', anchor='center').grid(row=0, column=0, columnspan=3, sticky='', pady=5, ipady=2, ipadx=2)
+                ttk.Label(
+                    frame,
+                    borderwidth=1,
+                    relief='raised',
+                    text=f'File: {filename}',
+                    anchor='center').grid(
+                        row=0,
+                        column=0,
+                        columnspan=3,
+                        sticky='',
+                        pady=5,
+                        ipady=2,
+                        ipadx=2)
             else:
-                ttk.Label(frame, text=f'{label}: {value}').grid(row=row, column=1, sticky='w')
+                ttk.Label(frame,
+                          text=f'{label}: {value}').grid(
+                              row=row,
+                              column=1,
+                              sticky='w')
                 row += 1
 
         # Modifiable main EXIF data
@@ -103,18 +163,22 @@ class ListFrame(ttk.Frame):
         menu = tk.Menu(exif_menu, tearoff=0)
         exif_menu.config(menu=menu)
 
-        self.populate_EXIF_metadata(menu=menu, image=image)
+        self.populate_exif_metadata(menu=menu, image=image)
 
         row += 1
 
         # Modifiable EXIF subdirectories
-        for ifd_enum, dir in image.get_formated_exif_subdir().items():
+        for ifd_enum in image.get_formatted_exif_subdir():
             directory_menu = ttk.Menubutton(frame, text=f'{ifd_enum.name}')
             directory_menu.grid(row=row, column=2, sticky='ew', padx=5)
             menu = tk.Menu(directory_menu, tearoff=0)
             directory_menu.config(menu=menu)
 
-            self.populate_EXIF_subdir(menu=menu, image=image, dir=dir, ifd_enum=ifd_enum)
+            self.populate_exif_subdir(
+                menu=menu,
+                image=image,
+                ifd_enum=ifd_enum,
+            )
             row += 1
 
         return frame
@@ -123,15 +187,15 @@ class ListFrame(ttk.Frame):
                       pointer_id: int,
                       current_value: str,
                       image: ImgManager,
-                      menu,
-                      dir: dict = None,
-                      ifd_enum=None) -> None:
+                      menu: tk.Menu,
+                      directory: dict[str, dict[str, Any]] | None = None,
+                      ifd_enum: IFD | None = None) -> None:
 
         proceed = messagebox.askokcancel(
             parent=self.frame,
             title="Are you sure?",
-            message="Modifying the metadata could cause irreparable damage to the image,\
-do you want to continue?")
+            message="Modifying the metadata could cause irreparable damage to \
+the image, do you want to continue?")
 
         if not proceed:
             return
@@ -146,7 +210,7 @@ do you want to continue?")
         if action is None:
             return
 
-        if action.lower() == 'edit':
+        if action.lower() == EDIT_ACTION:
             new_value = simpledialog.askstring(
                 parent=self.frame,
                 title="Edit metadata",
@@ -155,37 +219,60 @@ do you want to continue?")
             )
             if new_value is None:
                 return
-        elif action.lower() == 'delete':
-            confirm = messagebox.askokcancel(parent=self.frame, title="Are you sure?", message="This action is irreversible, do you want to continue?")
+        elif action.lower() == DELETE_ACTION:
+            confirm = messagebox.askokcancel(
+                parent=self.frame,
+                title="Are you sure?",
+                message="This action is irreversible, do you want to continue?"
+                )
             if not confirm:
                 return
         else:
-            messagebox.showerror(parent=self.frame, title='Error!', message=f'Selected option not recognized: {action}')
+            messagebox.showerror(
+                parent=self.frame,
+                title='Error!',
+                message=f'Selected option not recognized: {action}')
             return
 
         try:
-            if action.lower() == 'edit':
-                image.edit_exif_field(new_data=new_value, pointer_id=pointer_id, ifd_enum=ifd_enum)
-            elif action.lower() == 'delete':
-                image.delete_exif_field(pointer_id=pointer_id, ifd_enum=ifd_enum)
+            if action.lower() == EDIT_ACTION:
+                image.edit_exif_field(
+                    new_data=new_value,
+                    pointer_id=pointer_id,
+                    ifd_enum=ifd_enum)
 
-            if dir is None:
-                self.populate_EXIF_metadata(menu=menu, image=image)
+            elif action.lower() == DELETE_ACTION:
+                image.delete_exif_field(
+                    pointer_id=pointer_id,
+                    ifd_enum=ifd_enum)
+
+            if directory is None:
+                self.populate_exif_metadata(menu=menu, image=image)
             else:
-                self.populate_EXIF_subdir(menu=menu, image=image, dir=dir, ifd_enum=ifd_enum)
+                self.populate_exif_subdir(
+                    menu=menu,
+                    image=image,
+                    ifd_enum=ifd_enum,
+                )
 
-            messagebox.showinfo(parent=self.frame, title='Success!', message='The data has been modified succesfully.')
-        except (OSError, KeyError, ValueError, Exception) as error:
-            messagebox.showerror(parent=self.frame, title='Error!', message=f"Could not modify the data, reason: {error}")
+            messagebox.showinfo(
+                parent=self.frame,
+                title='Success!',
+                message='The data has been modified successfully.')
 
+        except (OSError, KeyError, ValueError) as error:
+            messagebox.showerror(
+                parent=self.frame,
+                title='Error!',
+                message=f"Could not modify the data, reason: {error}")
 
-    def populate_EXIF_metadata(self, menu, image: ImgManager):
+    def populate_exif_metadata(self, menu: tk.Menu, image: ImgManager) -> None:
         menu.delete(0, "end")
 
-        data = image.get_formated_exif_data()
+        data = image.get_formatted_exif_data()
 
         if not data:
-            menu.add_command(label="No EXIF metadata found")
+            menu.add_command(label=NO_EXIF_METADATA)
             return
 
         for label, element in data.items():
@@ -199,10 +286,18 @@ do you want to continue?")
                     )
                 )
 
-    def populate_EXIF_subdir(self, image: ImgManager, menu, dir: dict, ifd_enum):
+    def populate_exif_subdir(
+        self,
+        image: ImgManager,
+        menu: tk.Menu,
+        ifd_enum: IFD,
+    ) -> None:
         menu.delete(0, "end")
 
-        for label, element in dir.items():
+        dirs = image.get_formatted_exif_subdir()
+        directory = dirs.get(ifd_enum)
+
+        for label, element in directory.items():
             menu.add_command(
                 label=f"{label}: {element['value']}",
                 command=lambda e=element: self.edit_metadata(
@@ -210,17 +305,17 @@ do you want to continue?")
                     image=image,
                     current_value=e['value'],
                     menu=menu,
-                    dir=dir,
+                    directory=directory,
                     ifd_enum=ifd_enum
                     )
                 )
 
 
-def gui(image_list: list, edit: bool) -> None:
+def gui(image_list: list[ImgManager]) -> None:
     main_window = tk.Tk()
-    main_window.geometry("700x500")
+    main_window.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
     main_window.title('Scorpion')
 
-    ListFrame(main_window, image_list, 250)
+    ListFrame(main_window, image_list, PREVIEW_SIZE)
 
     main_window.mainloop()

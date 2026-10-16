@@ -1,10 +1,9 @@
-from src.constants import FILES, EDIT, GUI, DEBUG, RUN_TESTS
-
 import argparse
+from src.constants import DEBUG, EDIT, FILES, GUI, Options, RUN_TESTS
 
 
-def argument_manager() -> dict:
-    options = {
+def argument_manager() -> Options:
+    options: Options = {
         FILES: [],
         EDIT: False,
         GUI: False,
@@ -42,7 +41,7 @@ the GUI')
     if not args.FILES and not args.run_tests:
         parser.error(
             "You must either provide a valid FILE path \
-or run tests with --tests"
+or run tests with -t/--run_tests"
                      )
 
     options[FILES] = args.FILES

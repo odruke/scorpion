@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
-import subprocess
 import logging
+import subprocess
 import sys
 
 from src.arguments_manager import argument_manager
@@ -25,10 +25,12 @@ def main():
         try:
             images.append(ImgManager(image_path))
         except (OSError, ValueError) as error:
-            logger.error(f"Couln't manage file {image_path}. reason: {error}")
+            logger.error(
+                f"Couldn't manage file {image_path}. Reason: {error}"
+                )
 
     if options[GUI] or options[EDIT]:
-        gui(images, options[EDIT])
+        gui(images)
     else:
         for image in images:
             image.print_all_data()
