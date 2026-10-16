@@ -1,5 +1,5 @@
 
-from PIL import Image
+from PIL import Image, ImageOps
 from PIL.Image import Exif
 from PIL.ExifTags import TAGS, IFD, GPSTAGS
 from PIL.TiffImagePlugin import IFDRational
@@ -10,15 +10,18 @@ class ImgManager:
         self.file_path = file_path
         try:
             with Image.open(file_path) as image:
-                self.preview = self.__get_preview(image)
 
                 exif_data = image.getexif()
                 if not exif_data:
                     pass  # TODO manage this
 
-                self.primary_data: dict = self.__get_primary_data(image)
-                self.exif_metadata: dict = self.__get_exif_metadata(exif_data)
-                self.exif_subdirs: dict = self.__get_exif_subdirs(exif_data)
+                self.primary_data: dict = self.__extract_primary_data(image)
+                self.exif_metadata: dict = self.__extract_exif_metadata(exif_data)
+                self.exif_subdirs: dict = self.__extract_exif_subdirs(exif_data)
+
+                image = ImageOps.exif_transpose(image)
+                image.thumbnail((250, 250))
+                self.preview = image.copy()
         except (OSError, ValueError) as error:
             raise error
 
@@ -42,22 +45,19 @@ class ImgManager:
             return tuple(self.__format_value(v) for v in value)
         return value
 
-    def __get_preview(self, image: Image) -> bytearray:
-        pass
-
-    def __get_primary_data(self, image: Image) -> dict:  # TODO check for excep
+    def __extract_primary_data(self, image: Image) -> dict:  # TODO check for excep
         return {
                     "Filename": image.filename,
-                    "Image Size": image.size,
-                    "Image Height": image.height,
-                    "Image Width": image.width,
-                    "Image Format": image.format,
-                    "Image Mode": image.mode,
-                    "Image is Animated": getattr(image, "is_animated", False),
-                    "Frames in Image": getattr(image, "n_frames", 1)
+                    "Size": image.size,
+                    "Height": image.height,
+                    "Width": image.width,
+                    "Format": image.format,
+                    "Mode": image.mode,
+                    "Is Animated": getattr(image, "is_animated", False),
+                    "Frames": getattr(image, "n_frames", 1)
                 }
 
-    def __get_exif_metadata(self, exif_data: Exif) -> dict:
+    def __extract_exif_metadata(self, exif_data: Exif) -> dict:
         ifd_pointers = [ifd.value for ifd in IFD]
 
         main_metadata = {}
@@ -69,7 +69,7 @@ class ImgManager:
 
         return main_metadata
 
-    def __get_exif_subdirs(self, exif_data: Exif) -> dict:
+    def __extract_exif_subdirs(self, exif_data: Exif) -> dict:
         subdirectories = {}
 
         for ifd_enum in IFD:
@@ -88,6 +88,35 @@ class ImgManager:
             subdirectories[ifd_enum] = subdir_dict
 
         return subdirectories
+
+    def get_formated_exif_data(self) -> dict:
+        formated_data = {}
+
+        for tag_id, value in self.exif_metadata.items():
+            label = TAGS.get(tag_id, f"unknown_tag_{tag_id}")
+            element = {
+                'id': tag_id,
+                'value': value,
+            }
+            formated_data[label] = element
+
+        return formated_data
+
+    def get_formated_exif_subdir(self) -> dict:
+        dirs = {}
+
+        for ifd_enum, dir in self.exif_subdirs.items():
+            dirs[ifd_enum] = {}
+            tag_mapping = GPSTAGS if ifd_enum == IFD.GPSInfo else TAGS
+            for tag_id, value in dir.items():
+                label = tag_mapping.get(tag_id, f"unknown_tag_{tag_id}")
+                element = {
+                    'id': tag_id,
+                    'value': value,
+                }
+                dirs[ifd_enum][label] = element
+
+        return dirs
 
     def print_all_data(self) -> None:
         print("======== Main image metadata =========")
@@ -110,18 +139,55 @@ class ImgManager:
                 tag_name = tag_mapping.get(tag_id, f"unknown_tag_{tag_id}")
                 print(f"{tag_name:22}: {self.__format_value(value)}")
 
-    def edit_exif_field(self, new_data: str, pointer_id: int) -> None:
+    def __convert_value(self, current_value, new_value: str):
+        try:
+            return type(current_value)(new_value)
+        except (ValueError, TypeError) as error:
+            raise ValueError(
+                f"Invalid value: {new_value}"
+            ) from error
+
+    def edit_exif_field(self, new_data: str, pointer_id: int, ifd_enum=None) -> None:
         with Image.open(self.file_path) as image:
             exif_data = image.getexif()
 
-            exif_data[pointer_id] = new_data
+            if ifd_enum is None:
+                converted_new_data = self.__convert_value(
+                    current_value=exif_data[pointer_id],
+                    new_value=new_data
+                )
+                exif_data[pointer_id] = converted_new_data
+            else:
+                sub_ifd = exif_data.get_ifd(ifd_enum)
+                converted_new_data = self.__convert_value(
+                    current_value=exif_data[pointer_id],
+                    new_value=new_data
+                )
+                sub_ifd[pointer_id] = converted_new_data
 
             image.save(self.file_path, exif=exif_data)
+            if ifd_enum is None:
+                self.exif_metadata[pointer_id] = new_data
+            else:
+                self.exif_subdirs[ifd_enum][pointer_id] = new_data
 
-    def delete_exif_field(self, pointer_id: int):
+    def delete_exif_field(self, pointer_id: int, ifd_enum=None):
         with Image.open(self.file_path) as image:
             exif_data = image.getexif()
 
-            exif_data[pointer_id] = ''
+            if ifd_enum is None:
+                del exif_data[pointer_id]
+            else:
+                sub_ifd = exif_data.get_ifd(ifd_enum)
+                del sub_ifd[pointer_id]
 
             image.save(self.file_path, exif=exif_data)
+
+            if ifd_enum is None:
+                del self.exif_metadata[pointer_id]
+            else:
+                del self.exif_subdirs[ifd_enum][pointer_id]
+
+    def delete_all_metadata(self):
+        with Image.open(self.file_path) as image:
+            image.save(self.file_path)
