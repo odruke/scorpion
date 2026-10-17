@@ -1,11 +1,12 @@
 import argparse
-from src.constants import DEBUG, EDIT, FILES, GUI, Options, RUN_TESTS
+from src.constants import DEBUG, EDIT, FILES, GUI, Options, RUN_TESTS, DELETE
 
 
 def argument_manager() -> Options:
     options: Options = {
         FILES: [],
         EDIT: False,
+        DELETE: False,
         GUI: False,
         DEBUG: False,
         RUN_TESTS: False
@@ -24,8 +25,12 @@ where extract metadata')
     parser.add_argument('-e',
                         '--edit',
                         action='store_true',
-                        help='Run the program in edition mode, this launches \
-the GUI')
+                        help='Run the program in edition mode, GUI by default')
+
+    parser.add_argument('--delete',
+                        action='store_true',
+                        help='Delete all metadata from a image or images.\
+ Overrides --edit and --gui flags')
 
     parser.add_argument('-t',
                         '--run_tests',
@@ -46,6 +51,7 @@ or run tests with -t/--run_tests"
 
     options[FILES] = args.FILES
     options[EDIT] = args.edit
+    options[DELETE] = args.delete
     options[GUI] = True if args.edit is True else args.gui
     options[RUN_TESTS] = args.run_tests
     options[DEBUG] = args.debug
