@@ -31,8 +31,7 @@ deleting individual EXIF fields.
 - Run the configured pytest command with `-t` or `--run_tests`.
 
 Scorpion works with the image formats supported by the installed Pillow
-version. The repository does not currently contain automated test files, so
-test mode currently completes with no collected tests.
+version.
 
 ## Requirements
 
@@ -161,6 +160,14 @@ scorpion/
 │   ├── gui.py
 │   └── tools.py
 ├── requirements.txt
+├── tests/
+│   ├── conftest.py
+│   ├── test_application.py
+│   ├── test_arguments_manager.py
+│   ├── test_future_delete_cli.py
+│   ├── test_gui.py
+│   ├── test_img_manager.py
+│   └── test_tools.py
 └── README.md
 ```
 
@@ -191,14 +198,16 @@ Or use the application option:
 python scorpion.py --run_tests
 ```
 
-At the time of writing, no test files are included in the repository, so
-pytest reports that no tests were collected.
+The suite contains tests for the active CLI, metadata manager, logging, and
+headless GUI menu behavior. The future CLI-only `--delete` workflow has
+explicitly skipped specification tests until that flag is implemented.
 
 ## Limitations and responsible use
 
 - Scorpion processes local files; it does not download images or crawl
   websites.
-- EXIF support and writable field types depend on Pillow and the image format.
+- EXIF support and writable field types depend on Pillow and the image format,
+  keep in mind that some fields will impossible to modify.
 - Some metadata may be binary, malformed, unsupported, or unavailable.
 - GUI mode requires Tkinter and a display server.
 - Metadata writes modify the original file path.
