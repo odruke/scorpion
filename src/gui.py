@@ -26,9 +26,12 @@ class ListFrame(ttk.Frame):
         parent: tk.Misc,
         img_list: list[ImgManager],
         item_height: int,
+        edit_mode: bool,
     ) -> None:
         super().__init__(master=parent)
         self.pack(expand=True, fill='both')
+
+        self.edit_mode = edit_mode
 
         self.tk_previews = []
         # widget data
@@ -283,7 +286,7 @@ the image, do you want to continue?")
                     image=image,
                     current_value=e['value'],
                     menu=menu
-                    )
+                    ) if self.edit_mode else None
                 )
 
     def populate_exif_subdir(
@@ -307,15 +310,15 @@ the image, do you want to continue?")
                     menu=menu,
                     directory=directory,
                     ifd_enum=ifd_enum
-                    )
+                    ) if self.edit_mode else None
                 )
 
 
-def gui(image_list: list[ImgManager]) -> None:
+def gui(image_list: list[ImgManager], edit_mode: bool) -> None:
     main_window = tk.Tk()
     main_window.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
     main_window.title('Scorpion')
 
-    ListFrame(main_window, image_list, PREVIEW_SIZE)
+    ListFrame(main_window, image_list, PREVIEW_SIZE, edit_mode)
 
     main_window.mainloop()

@@ -5,8 +5,7 @@
 Scorpion is a Python image metadata inspector and editor created as part of
 the 42 curriculum.
 
-The program opens one or more local image files with
-[Pillow](https://python-pillow.org/), extracts their basic image information
+The program opens one or more local image files, extracts their basic image information
 and EXIF metadata, and presents the result either in the terminal or in a
 Tkinter graphical interface. The GUI also provides actions for editing and
 deleting individual EXIF fields.
@@ -59,8 +58,6 @@ On Windows, activate the environment with:
 .venv\Scripts\Activate.ps1
 ```
 
-The repository may contain a local `.venv` directory, but virtual
-environments should be created locally rather than copied between machines.
 
 ## Usage
 
@@ -121,9 +118,9 @@ paths.
 
 Terminal mode displays three sections for each successfully opened image:
 
-1. **Main image metadata** — filename, dimensions, format, mode, animation
+1. **Main image data** — filename, dimensions, format, mode, animation
    status, and frame count.
-2. **Main EXIF metadata** — EXIF tags that are not pointers to a subdirectory.
+2. **EXIF metadata** — EXIF tags that are not pointers to a subdirectory, when available.
 3. **Image file directory subdirectories** — metadata found in EXIF,
    GPS, interoperability, or other available IFDs.
 
@@ -143,7 +140,7 @@ information. EXIF data is exposed through menus:
   saving;
 - deleting removes the selected field from the image.
 
-Changes are written back to the original image file. Metadata editing can
+Changes are written back to the original image file. Metadata editing can irreversibly
 damage or remove information, so use copies of important images.
 
 ## Project structure
@@ -207,7 +204,7 @@ explicitly skipped specification tests until that flag is implemented.
 - Scorpion processes local files; it does not download images or crawl
   websites.
 - EXIF support and writable field types depend on Pillow and the image format,
-  keep in mind that some fields will impossible to modify.
+  keep in mind that some fields will be impossible to modify.
 - Some metadata may be binary, malformed, unsupported, or unavailable.
 - GUI mode requires Tkinter and a display server.
 - Metadata writes modify the original file path.

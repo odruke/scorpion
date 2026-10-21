@@ -63,7 +63,7 @@ def main():
                 return
 
     if options[GUI] or options[EDIT]:
-        gui(images)
+        gui(images, options[EDIT])
     else:
         for image in images:
             image.print_all_data()
