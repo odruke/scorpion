@@ -2,7 +2,7 @@ import subprocess
 import sys
 
 import scorpion
-from src.constants import DEBUG, EDIT, FILES, GUI, RUN_TESTS
+from src.constants import DEBUG, DELETE, EDIT, FILES, GUI, RUN_TESTS
 
 
 def test_main_dispatches_test_mode(monkeypatch):
@@ -39,6 +39,7 @@ def test_main_logs_invalid_image_and_processes_valid_images(
         GUI: False,
         EDIT: False,
         DEBUG: False,
+        DELETE: False,
     }
     created = []
 

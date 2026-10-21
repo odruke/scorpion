@@ -1,4 +1,8 @@
 
+import ast
+import os
+import tempfile
+from fractions import Fraction
 from typing import Any
 
 from PIL import Image, ImageOps
@@ -138,12 +142,111 @@ class ImgManager:
                 print(f"{tag_name:22}: {self.__format_value(value)}")
 
     def __convert_value(self, current_value: Any, new_value: str) -> Any:
+        value = new_value.strip()
+
+        if isinstance(current_value, bool):
+            if value.lower() in {"true", "yes", "1"}:
+                return True
+            if value.lower() in {"false", "no", "0"}:
+                return False
+            raise ValueError(f"Invalid boolean value: {new_value}")
+
+        if isinstance(current_value, IFDRational):
+            try:
+                fraction = Fraction(value)
+                return IFDRational(
+                    fraction.numerator,
+                    fraction.denominator,
+                )
+            except (ValueError, ZeroDivisionError) as error:
+                raise ValueError(
+                    f"Invalid rational value: {new_value}"
+                ) from error
+
+        if isinstance(current_value, bytes):
+            if value.lower().startswith("hex:"):
+                try:
+                    return bytes.fromhex(value[4:])
+                except ValueError as error:
+                    raise ValueError(
+                        f"Invalid hexadecimal bytes: {new_value}"
+                    ) from error
+            return value.encode("utf-8")
+
+        if isinstance(current_value, tuple):
+            return self.__convert_sequence(
+                current_value,
+                value,
+                tuple,
+            )
+
+        if isinstance(current_value, list):
+            return self.__convert_sequence(
+                current_value,
+                value,
+                list,
+            )
+
         try:
-            return type(current_value)(new_value)
+            return type(current_value)(value)
         except (ValueError, TypeError) as error:
             raise ValueError(
                 f"Invalid value: {new_value}\n{error}"
             ) from error
+
+    def __convert_sequence(
+        self,
+        current_value: tuple[Any, ...] | list[Any],
+        new_value: str,
+        sequence_type: type[tuple[Any, ...]] | type[list[Any]],
+    ) -> tuple[Any, ...] | list[Any]:
+        try:
+            parsed = ast.literal_eval(new_value)
+        except (SyntaxError, ValueError) as error:
+            raise ValueError(
+                f"Invalid sequence value: {new_value}"
+            ) from error
+
+        if not isinstance(parsed, sequence_type):
+            raise ValueError(
+                f"Expected a {sequence_type.__name__} value"
+            )
+
+        if len(parsed) != len(current_value):
+            raise ValueError(
+                f"Expected {len(current_value)} values, got {len(parsed)}"
+            )
+
+        converted = [
+            self.__convert_value(current, str(new))
+            for current, new in zip(current_value, parsed)
+        ]
+        return sequence_type(converted)
+
+    def __save_atomically(self, image: Image.Image, exif_data: Exif) -> None:
+        source = os.path.abspath(self.file_path)
+        directory = os.path.dirname(source)
+        suffix = os.path.splitext(source)[1]
+        temporary_path: str | None = None
+
+        try:
+            with tempfile.NamedTemporaryFile(
+                dir=directory,
+                prefix=".scorpion-",
+                suffix=suffix,
+                delete=False,
+            ) as temporary:
+                temporary_path = temporary.name
+
+            image.save(temporary_path, exif=exif_data)
+            os.replace(temporary_path, source)
+            temporary_path = None
+        finally:
+            if temporary_path is not None:
+                try:
+                    os.unlink(temporary_path)
+                except FileNotFoundError:
+                    pass
 
     def edit_exif_field(
         self,
@@ -168,7 +271,7 @@ class ImgManager:
                 )
                 sub_ifd[pointer_id] = converted_new_data
 
-            image.save(self.file_path, exif=exif_data)
+            self.__save_atomically(image, exif_data)
             if ifd_enum is None:
                 self.exif_metadata[pointer_id] = converted_new_data
             else:
@@ -188,7 +291,7 @@ class ImgManager:
                 sub_ifd = exif_data.get_ifd(ifd_enum)
                 del sub_ifd[pointer_id]
 
-            image.save(self.file_path, exif=exif_data)
+            self.__save_atomically(image, exif_data)
 
             if ifd_enum is None:
                 del self.exif_metadata[pointer_id]
@@ -197,7 +300,7 @@ class ImgManager:
 
     def delete_all_metadata(self) -> None:
         with Image.open(self.file_path) as image:
-            image.save(self.file_path)
+            self.__save_atomically(image, Image.Exif())
 
         self.exif_metadata.clear()
         self.exif_subdirs.clear()

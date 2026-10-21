@@ -3,7 +3,9 @@ from pathlib import Path
 import pytest
 from PIL.ExifTags import IFD, TAGS
 from PIL.TiffImagePlugin import IFDRational
+from PIL import Image
 
+import img_manager.img_manager as img_manager_module
 from img_manager.img_manager import ImgManager
 
 
@@ -87,13 +89,57 @@ def test_edit_subdirectory_field_uses_subdirectory_value_type(image_path: Path):
     assert reloaded.exif_subdirs[IFD.GPSInfo][1] == "S"
 
 
-def test_invalid_edit_does_not_change_cached_value(image_path: Path):
+@pytest.mark.parametrize(
+    ("current_value", "new_value", "expected"),
+    [
+        (b"old", "new", b"new"),
+        (b"old", "hex:01 ff", b"\x01\xff"),
+        ((1, 2), "(3, 4)", (3, 4)),
+        (IFDRational(1, 2), "3/4", IFDRational(3, 4)),
+    ],
+)
+def test_convert_value_supports_common_metadata_types(
+    current_value,
+    new_value,
+    expected,
+):
+    manager = object.__new__(ImgManager)
+
+    assert manager._ImgManager__convert_value(
+        current_value,
+        new_value,
+    ) == expected
+
+
+def test_invalid_edit_does_not_modify_file_or_cache(image_path: Path):
     manager = ImgManager(str(image_path))
 
     with pytest.raises(ValueError):
-        manager._ImgManager__convert_value(1, "not an integer")
+        manager.edit_exif_field("not an integer", 274)
+
+    assert manager.exif_metadata[274] == 1
+    reloaded = ImgManager(str(image_path))
+    assert reloaded.exif_metadata[274] == 1
+
+
+def test_failed_atomic_replace_does_not_modify_file_or_cache(
+    image_path: Path,
+    monkeypatch,
+):
+    manager = ImgManager(str(image_path))
+
+    def fail_replace(*args):
+        assert len(args) == 2
+        raise OSError("replacement failed")
+
+    monkeypatch.setattr(img_manager_module.os, "replace", fail_replace)
+
+    with pytest.raises(OSError, match="replacement failed"):
+        manager.edit_exif_field("updated description", 270)
 
     assert manager.exif_metadata[270] == "initial description"
+    with Image.open(image_path) as image:
+        assert image.getexif()[270] == "initial description"
 
 
 def test_delete_main_and_subdirectory_fields_updates_cache_and_file(

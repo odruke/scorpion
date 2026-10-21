@@ -11,6 +11,7 @@ def image_path(tmp_path: Path) -> Path:
     image = Image.new("RGB", (16, 12), "white")
     exif = image.getexif()
     exif[270] = "initial description"
+    exif[274] = 1
     gps = exif.get_ifd(IFD.GPSInfo)
     gps[1] = "N"
     image.save(path, exif=exif)
