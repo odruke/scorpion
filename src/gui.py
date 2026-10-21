@@ -11,13 +11,15 @@ from src.constants import (
     DELETE_ACTION,
     EDIT_ACTION,
     FILENAME_LABEL,
-    LIST_ITEM_EXTRA_HEIGHT,
     MOUSE_WHEEL_DELTA,
     NO_EXIF_METADATA,
     PREVIEW_SIZE,
     WINDOW_HEIGHT,
     WINDOW_WIDTH,
 )
+
+ITEM_PADDING = 10
+SEPARATOR_HEIGHT = 1
 
 
 class ListFrame(ttk.Frame):
@@ -37,32 +39,44 @@ class ListFrame(ttk.Frame):
         # widget data
         self.img_list = img_list
         self.item_number = len(img_list)
-        self.list_height = self.item_number * (
-            item_height + LIST_ITEM_EXTRA_HEIGHT
-        )
         self.item_height = item_height
+        self.row_height = item_height + (2 * ITEM_PADDING) + SEPARATOR_HEIGHT
+        self.list_height = self.item_number * self.row_height
 
         # canvas
         self.canvas = tk.Canvas(
             self,
-            yscrollincrement=item_height + LIST_ITEM_EXTRA_HEIGHT,
+            yscrollincrement=self.row_height,
             scrollregion=(0, 0, CANVAS_WIDTH, self.list_height),
         )
-        # self.canvas.configure(yscrollincrement=self.canvas.bbox('all'))
         self.canvas.pack(expand=True, fill='both')
 
         # display frame
         self.frame = ttk.Frame(self)
+        self.frame.configure(height=self.list_height)
+        self.frame.pack_propagate(False)
+        self.canvas_window: int | None = None
 
         for image in self.img_list:
-            self.create_item(image).pack(
-                expand=True,
-                fill='both',
-                padx=4,
-                pady=10)
-            ttk.Separator(
-                self.frame,
-                orient='horizontal').pack(expand=True, fill='x')
+            row = ttk.Frame(self.frame, height=self.row_height)
+            row.pack(expand=False, fill='x')
+            row.pack_propagate(False)
+
+            item = self.create_item(image, item_height, row)
+            item.place(
+                x=4,
+                y=ITEM_PADDING,
+                relwidth=1,
+                width=-8,
+                height=item_height,
+            )
+            separator = ttk.Separator(row, orient='horizontal')
+            separator.place(
+                x=0,
+                y=item_height + (2 * ITEM_PADDING),
+                relwidth=1,
+                height=SEPARATOR_HEIGHT,
+            )
 
         # events
         self.canvas.bind_all("<MouseWheel>", self.on_mousewheel)
@@ -98,16 +112,33 @@ class ListFrame(ttk.Frame):
             self.canvas.unbind_all("<Button-4>")
             self.canvas.unbind_all("<Button-5>")
 
-        self.canvas.create_window(
-            (0, 0),
-            window=self.frame,
-            anchor='nw',
-            width=self.winfo_width(),
-            height=height
+        self.canvas.configure(
+            scrollregion=(0, 0, self.winfo_width(), self.list_height)
+        )
+        if self.canvas_window is None:
+            self.canvas_window = self.canvas.create_window(
+                (0, 0),
+                window=self.frame,
+                anchor='nw',
+                width=self.winfo_width(),
+                height=height,
+            )
+        else:
+            self.canvas.itemconfigure(
+                self.canvas_window,
+                width=self.winfo_width(),
+                height=height,
             )
 
-    def create_item(self, image: ImgManager) -> ttk.Frame:
-        frame = ttk.Frame(self.frame)
+    def create_item(
+        self,
+        image: ImgManager,
+        item_height: int,
+        parent: tk.Misc,
+    ) -> ttk.Frame:
+        frame = ttk.Frame(parent)
+        frame.configure(height=item_height)
+        frame.pack_propagate(False)
 
         # grid layout
         frame.rowconfigure((0, 1, 2, 3, 4, 5, 6, 7, 8), weight=1)
@@ -316,7 +347,7 @@ the image, do you want to continue?")
 
 def gui(image_list: list[ImgManager], edit_mode: bool) -> None:
     main_window = tk.Tk()
-    main_window.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT}")
+    main_window.geometry(f"{WINDOW_WIDTH}x{WINDOW_HEIGHT + ITEM_PADDING * 2}")
     main_window.title('Scorpion')
 
     ListFrame(main_window, image_list, PREVIEW_SIZE, edit_mode)
